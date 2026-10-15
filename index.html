@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Business Case ML</title>
+<meta name="description" content="Aplicación guiada para armar el business case de un modelo predictivo: CAPEX, OPEX, ROI, payback y VAN.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231C3FE0'/%3E%3Cpath d='M8 23V15M14 23V10M20 23V17M26 23V7' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: banda de marca + stepper fijo; escenario del paso al centro, resumen en vivo a la derecha (escritorio) */
+:root{
+  --bg:#F4F5FB; --surface:#FFFFFF; --fg:#13143A; --muted:#5B5F82; --line:#DCDFEE; --soft:#EEF0FA; --tint:#E9ECFF;
+  --accent:#1A2BE0; --accent2:#5A2D91; --on-accent:#FFFFFF;
+  --good:#0E7F57; --bad:#C0352B; --warn:#9A6400;
+  --good-bg:#E3F4EC; --bad-bg:#FBE7E5; --warn-bg:#FBF0DC;
+  --font:"Montserrat",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0C0E22; --surface:#151834; --fg:#E7E9F8; --muted:#A0A5CB; --line:#2B2F57; --soft:#1C2042; --tint:#20265A;
+  --accent:#8592FF; --accent2:#B08CEB; --on-accent:#0C0E22;
+  --good:#4CC99A; --bad:#FF7B70; --warn:#E8B04E;
+  --good-bg:#12302A; --bad-bg:#3A1D22; --warn-bg:#352A14; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0C0E22; --surface:#151834; --fg:#E7E9F8; --muted:#A0A5CB; --line:#2B2F57; --soft:#1C2042; --tint:#20265A;
+  --accent:#8592FF; --accent2:#B08CEB; --on-accent:#0C0E22;
+  --good:#4CC99A; --bad:#FF7B70; --warn:#E8B04E;
+  --good-bg:#12302A; --bad-bg:#3A1D22; --warn-bg:#352A14; color-scheme:dark }
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.55;font-variant-numeric:tabular-nums;padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+button{font:inherit;cursor:pointer}
+.gut{max-width:1280px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Banda superior */
+.top{background:linear-gradient(100deg,#1C3FE0 0%,#3A35B8 55%,#5B2D8A 100%);color:#fff;padding-top:env(safe-area-inset-top,0px)}
+.top-in{padding-block:14px;display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto}
+.logo{width:34px;height:34px;border-radius:8px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);display:grid;place-items:center}
+.app{font-weight:800;font-size:16px;line-height:1.1}
+.sub{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.8;font-weight:600}
+.pname{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;flex:1 1 260px;max-width:440px}
+.pname span{opacity:.85;white-space:nowrap}
+.pname input{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:7px 10px;width:100%;font:inherit;font-weight:600}
+.pname input::placeholder{color:rgba(255,255,255,.65)}
+.top-actions{display:flex;flex-wrap:wrap;gap:6px}
+.tb{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:6px;padding:7px 12px;font-weight:600;font-size:12.5px}
+.tb:hover{background:rgba(255,255,255,.22)}
+
+/* Stepper */
+.stepbar{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px)}
+.stepper{display:flex;gap:2px;overflow-x:auto;padding-block:8px;scrollbar-width:thin}
+.st{display:flex;align-items:center;gap:8px;background:none;border:0;border-radius:6px;padding:7px 10px;color:var(--muted);font-weight:600;font-size:12.5px;white-space:nowrap}
+.st:hover{background:var(--soft)}
+.st .n{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;border:1.5px solid var(--line);color:var(--muted);flex:none}
+.st.done .n{background:var(--soft);border-color:var(--accent);color:var(--accent)}
+.st.cur{color:var(--fg);background:var(--tint)}
+.st.cur .n{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+
+/* Cuerpo */
+.shell{display:grid;gap:24px;grid-template-columns:minmax(0,1fr);padding-block:24px 56px}
+@media (min-width:1060px){.shell{grid-template-columns:minmax(0,1fr) 300px;align-items:start}
+  .rail{position:sticky;top:76px}}
+main{min-width:0}
+.kicker{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--accent)}
+h1{margin:6px 0 6px;font-size:clamp(22px,2.8vw,30px);font-weight:800;line-height:1.15;text-wrap:balance}
+h2{margin:0 0 10px;font-size:16px;font-weight:700}
+h3{margin:0 0 8px;font-size:14px;font-weight:700}
+.lead{margin:0 0 18px;color:var(--muted);max-width:68ch;font-size:15px}
+.stack{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+
+/* Guía */
+.guide{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0;background:var(--tint);border-radius:10px;overflow:hidden}
+.guide > div{padding:14px 16px}
+.guide > div + div{border-left:1px solid var(--line)}
+@media (max-width:560px){.guide > div + div{border-left:0;border-top:1px solid var(--line)}}
+.guide h3{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.guide ul{margin:0;padding-left:18px;display:grid;gap:3px}
+.guide .err li::marker{color:var(--bad)}
+.note{font-size:12.5px;color:var(--muted);margin:0;max-width:80ch}
+.note b{color:var(--fg)}
+
+/* Formularios */
+.params{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 18px}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:600}
+label.f small{font-weight:500;font-size:11.5px;color:var(--muted)}
+input,select{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-width:0;width:100%}
+input[type=number]{text-align:right}
+input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);padding:0}
+
+/* Tablas */
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;text-align:left;padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.c-on{width:28px}
+td.c-txt input{min-width:15rem}
+td.c-num input{width:6.8rem}
+.r{text-align:right;white-space:nowrap}
+td.sub{font-weight:600;min-width:7rem}
+tr.off td:not(.c-on):not(.c-del){opacity:.45}
+tfoot td{border-bottom:0;font-weight:700;padding-top:10px}
+.del{background:none;border:0;color:var(--muted);font-size:18px;line-height:1;padding:4px 7px;border-radius:4px}
+.del:hover{color:var(--bad);background:var(--soft)}
+.add{margin-top:10px;background:none;border:1px dashed var(--line);color:var(--accent);font-weight:600;font-size:12.5px;border-radius:6px;padding:7px 12px}
+.add:hover{border-color:var(--accent)}
+.tools{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:end;margin-bottom:12px}
+.tools label.f{flex:1 1 200px;max-width:300px}
+
+/* Navegación */
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:20px;flex-wrap:wrap}
+.btn{font-weight:600;font-size:13.5px;border-radius:7px;padding:10px 16px;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent)}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.quiet{background:transparent;border-color:var(--line);color:var(--fg)}
+
+/* Inicio */
+.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.choice{text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:18px;color:var(--fg);display:flex;flex-direction:column;gap:6px}
+.choice:hover{border-color:var(--accent)}
+.choice b{font-size:15px}
+.choice span{color:var(--muted);font-size:13px}
+.choice .go{color:var(--accent);font-weight:700;font-size:13px;margin-top:4px}
+.concepts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.concepts > div{padding:16px}
+.concepts > div + div{border-left:1px solid var(--line)}
+@media (max-width:680px){.concepts > div + div{border-left:0;border-top:1px solid var(--line)}}
+.concepts .t{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+.concepts p{margin:6px 0 0;font-size:13px;color:var(--muted)}
+.formula{font-size:12.5px;background:var(--soft);border-radius:6px;padding:8px 10px;margin-top:8px;color:var(--fg)}
+.resume{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--accent);background:var(--tint);border-radius:10px;padding:14px 16px}
+
+/* Resumen en vivo */
+.rail .card{padding:16px}
+.ln{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.ln:last-child{border-bottom:0}
+.ln span:first-child{color:var(--muted)}
+.ln b{font-weight:700}
+.big{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.bt{background:var(--soft);border-radius:8px;padding:10px}
+.bt .l{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.bt .v{font-size:19px;font-weight:800;line-height:1.2;margin-top:2px}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+.mini{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:16px}
+.mini b{font-weight:700}
+@media (min-width:1060px){.mini{display:none}}
+@media (max-width:1059px){.rail{display:none}}
+
+/* Resultados */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{border-radius:9px;background:var(--surface);border:1px solid var(--line);padding:14px}
+.kpi .l{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.kpi .v{font-size:clamp(20px,2.4vw,27px);font-weight:800;line-height:1.15;margin-top:4px;overflow-wrap:anywhere}
+.kpi .s{font-size:11.5px;color:var(--muted);margin-top:3px}
+.verdict{font-size:14px;padding:12px 14px;border-radius:9px;border:1px solid var(--line);background:var(--surface)}
+.verdict.ok{border-color:var(--good);background:var(--good-bg)}
+.verdict.no{border-color:var(--bad);background:var(--bad-bg)}
+.two{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+@media (max-width:860px){.two{grid-template-columns:minmax(0,1fr)}}
+.sbar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--soft);margin:4px 0 12px}
+.sbar i{display:block;height:100%}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;vertical-align:-1px}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.checks li{padding:9px 12px;border-radius:8px;font-size:13px;display:flex;gap:10px;align-items:flex-start}
+.checks li::before{font-weight:800;flex:none;width:16px;text-align:center}
+.checks .bad{background:var(--bad-bg)} .checks .bad::before{content:"!";color:var(--bad)}
+.checks .warn{background:var(--warn-bg)} .checks .warn::before{content:"!";color:var(--warn)}
+.checks .ok{background:var(--good-bg)} .checks .ok::before{content:"✓";color:var(--good)}
+details.card summary{font-weight:700;cursor:pointer}
+details.card[open] summary{margin-bottom:10px}
+.dt td,.dt th{padding:5px 6px;font-size:13px}
+.dt h4{margin:14px 0 4px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;z-index:20;max-width:calc(100% - 32px)}
+svg text{font-family:var(--font)}
+
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(10,12,30,.45);display:grid;place-items:center;z-index:30;padding:16px}
+.modal-box{background:var(--surface);border-radius:12px;padding:20px;max-width:420px;width:100%;border:1px solid var(--line)}
+.modal-box p{margin:0 0 16px}
+.modal-box .actions{justify-content:flex-end}
+#tsvBox{width:100%;height:120px;margin-top:10px;font-size:12px;font-family:ui-monospace,monospace}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* Impresión / PDF */
+@media print{
+  :root{--bg:#fff;--surface:#fff;--fg:#111;--muted:#555;--line:#ccc;--soft:#f2f2f6;--tint:#f2f2f6;--accent:#1A2BE0;--accent2:#5A2D91;--good:#0E7F57;--bad:#C0352B;--good-bg:#fff;--bad-bg:#fff;--warn-bg:#fff;color-scheme:light}
+  .top-actions,.stepbar,.rail,.nav,.actions,.mini,.noprint{display:none!important}
+  .top{background:#fff;color:#111;border-bottom:2px solid #1A2BE0}
+  .pname input{border:0;color:#111;background:none;padding:0;font-size:16px}
+  .logo{display:none}
+  .shell{display:block;padding-block:12px}
+  .card,.kpi{break-inside:avoid}
+  details.card{display:block}
+  body{font-size:12px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="gut top-in">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 32 32"><path d="M6 25V16M13 25V10M20 25V18M27 25V6" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg></div>
+      <div><div class="app">Business Case ML</div><div class="sub">CAPEX · OPEX · ROI</div></div>
+    </div>
+    <label class="pname" for="pname"><span>Proyecto</span><input id="pname" placeholder="Nombre del proyecto"></label>
+    <div class="top-actions">
+      <button class="tb" type="button" id="btnEjemplo">Cargar ejemplo</button>
+      <button class="tb" type="button" id="btnNuevo">Nuevo</button>
+      <button class="tb" type="button" id="btnAbrir">Abrir</button>
+      <button class="tb" type="button" id="btnGuardar">Guardar</button>
+      <input type="file" id="fileIn" accept=".json,application/json" hidden>
+    </div>
+  </div>
+</header>
+<div class="stepbar"><nav class="gut stepper" id="stepper" aria-label="Pasos del business case"></nav></div>
+
+<div class="gut shell">
+  <main id="stage"></main>
+  <aside class="rail" id="rail" aria-label="Resumen en vivo"></aside>
+</div>
+
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalMsg">
+  <div class="modal-box">
+    <p id="modalMsg"></p>
+    <div class="actions"><button class="btn quiet" type="button" id="modalNo">Cancelar</button><button class="btn" type="button" id="modalOk">Continuar</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function(){
+'use strict';
+const KEY='bcml-app-v1';
+const XLSX_SRC='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+
+/* ---------- Datos ---------- */
+function example(){return {
+  name:'Modelo de propensión de retargeting (ejemplo)',
+  g:{tc:3.5,build:4,hor:12,rate:12,tarifa:140,esc:'margen',mg:50},
+  b:{n:20000,c0:1.0,c1:1.3,mg:120,ah:3000,ramp:2},
+  hh:[
+    {c:'Modelo de propensión – Etapa 1 (pipeline, entrenamiento, integración, piloto)',h:205,t:140,on:true},
+    {c:'Dashboard de métricas del modelo',h:40,t:140,on:true},
+    {c:'Dashboard de métricas de negocio (opcional)',h:60,t:140,on:true},
+    {c:'Pipeline de reentrenamiento automático (soporte semiautomático)',h:55,t:140,on:true}
+  ],
+  infraDev:[
+    {c:'Preparación del histórico: 90 días de GA4 y 22 GB del e-commerce',u:4,on:true},
+    {c:'Entrenamiento inicial de clustering K-Means (~742 GB)',u:211,on:true},
+    {c:'Entrenamiento inicial del clasificador Boosted Tree',u:4,on:true},
+    {c:'Validación en ambiente Dev (muestra del 10%)',u:22,on:true}
+  ],
+  serv:[
+    {c:'Soporte semiautomático: mantenimiento ad-hoc',h:8,t:140,on:true},
+    {c:'Soporte manual: mantenimiento ad-hoc (alternativa)',h:18,t:140,on:false},
+    {c:'Soporte manual: reentrenamiento mensual (alternativa)',h:8,t:140,on:false},
+    {c:'Horas del equipo TI / marketing del cliente',h:0,t:80,on:true}
+  ],
+  infraOps:[
+    {c:'Procesamiento y scoring batch cada 30 min',a:66,z:72,on:true},
+    {c:'Reentrenamiento mensual del clustering (360 GB)',a:107,z:115,on:true},
+    {c:'Reentrenamiento mensual del clasificador',a:2,z:5,on:true},
+    {c:'Predicciones del score',a:5,z:10,on:true},
+    {c:'Almacenamiento (~1 TiB)',a:20,z:25,on:true},
+    {c:'Serving: reglas de canal y envío a la plataforma de mensajería',a:5,z:10,on:true},
+    {c:'Servicios auxiliares: logging, monitoreo, scheduler, secretos',a:10,z:20,on:true}
+  ],
+  otros:[{c:'Envíos incrementales (email, SMS, WhatsApp)',m:0,on:true}],
+  step:1,max:1
+};}
+function blank(){return {
+  name:'',
+  g:{tc:3.5,build:3,hor:12,rate:12,tarifa:0,esc:'margen',mg:30},
+  b:{n:0,c0:0,c1:0,mg:0,ah:0,ramp:2},
+  hh:['Discovery y preparación de datos','Feature engineering, entrenamiento y validación','Integración con canales de activación','Setup de MLOps, monitoreo y dashboards','QA, piloto y go-live'].map(c=>({c,h:0,t:0,on:true})),
+  infraDev:['Procesamiento del histórico','Entrenamientos iniciales y experimentos','Ambiente de desarrollo y validación'].map(c=>({c,u:0,on:true})),
+  serv:['Soporte y mantenimiento','Reentrenamiento y revisión de métricas','Horas del equipo del cliente'].map(c=>({c,h:0,t:0,on:true})),
+  infraOps:['Procesamiento y scoring','Reentrenamientos','Almacenamiento','Serving (APIs, funciones, bases de lectura)','Logging, monitoreo y scheduler'].map(c=>({c,a:0,z:0,on:true})),
+  otros:['Costo de la acción (envíos, medios, incentivos)','Licencias de herramientas'].map(c=>({c,m:0,on:true})),
+  step:1,max:1
+};}
+
+const STEPS=[
+  {id:'inicio',t:'Inicio'},
+  {id:'sup',t:'Supuestos'},
+  {id:'hh',t:'Construcción',tag:'CAPEX'},
+  {id:'infraDev',t:'Infra de desarrollo',tag:'CAPEX'},
+  {id:'serv',t:'Servicios mensuales',tag:'OPEX'},
+  {id:'infraOps',t:'Infra mensual',tag:'OPEX'},
+  {id:'otros',t:'Otros costos',tag:'OPEX'},
+  {id:'ben',t:'Beneficio',tag:'Beneficio'},
+  {id:'res',t:'Resultados'}
+];
+
+const GUIDE={
+  sup:{h:'Supuestos del proyecto',lead:'Define el marco del cálculo: cuánto dura la construcción, cuántos meses de operación vas a evaluar y con qué tasa se descuentan los flujos.',
+    que:['Tipo de cambio para convertir a soles los costos de nube en dólares.','Meses de construcción, desde el kickoff hasta el go-live, incluido el piloto.','Horizonte de operación: los meses que evalúas después del go-live. Lo habitual es 12 a 36.','Tasa de descuento: la que usa el área financiera del cliente (WACC o tasa mínima).'],
+    err:['Horizontes largos sin reentrenamiento: el modelo se degrada y el beneficio cae.','Usar una tasa de descuento distinta a la de finanzas.']},
+  hh:{h:'Construcción: horas hombre',lead:'Las horas de tu equipo para construir la solución. Suele ser la parte principal del CAPEX.',
+    que:['Discovery y preparación de datos','Feature engineering, entrenamiento y validación','Integración con los canales donde se usa el score','Setup de MLOps: orquestación, monitoreo, dashboards','QA, piloto y go-live'],
+    err:['Olvidar el piloto y el go-live, que suelen tomar varias semanas.','Usar una sola tarifa cuando hay roles con costos distintos.'],
+    note:'<b>Nota contable:</b> bajo NIC 38, el discovery va a gasto y el desarrollo puede capitalizarse como intangible. Para el ROI de caja no cambia nada; confirma el tratamiento con finanzas.'},
+  infraDev:{h:'Infraestructura de desarrollo',lead:'El consumo de nube que solo ocurre durante la construcción: procesar el histórico y entrenar los primeros modelos. Ingrésalo en dólares.',
+    que:['Procesamiento del histórico','Entrenamientos iniciales y experimentos','Ambiente de desarrollo y validación'],
+    err:['Estimar solo el entrenamiento final y no los experimentos previos.','Olvidar el consumo de los ambientes de desarrollo.']},
+  serv:{h:'Servicios de operación mensual',lead:'Las horas que cada mes mantienen vivo el modelo, tanto las de tu equipo como las del cliente.',
+    que:['Soporte y mantenimiento','Reentrenamiento y revisión de métricas','Horas del equipo de TI y marketing del cliente que operan la solución'],
+    err:['Asumir que el modelo no necesita mantenimiento: sin reentrenamiento, el beneficio cae.','No contar las horas del cliente, que también son costo del proyecto.'],
+    note:'<b>¿Comparas modalidades de soporte?</b> Agrega ambas y deja activa solo una con la casilla de la izquierda. Guarda cada versión como escenario.'},
+  infraOps:{h:'Infraestructura de operación mensual',lead:'El consumo mensual de nube con el modelo en producción, en dólares. Ingresa un rango mínimo y máximo; el escenario elige cuál usar.',
+    que:['Procesamiento y scoring','Reentrenamientos','Almacenamiento','Serving: APIs, funciones, bases de lectura','Logging, monitoreo y scheduler'],
+    err:['Presupuestar el mínimo: las reejecuciones y los picos son normales.','No incluir almacenamiento, que crece cada mes.']},
+  otros:{h:'Otros costos mensuales',lead:'Costos mensuales que no son horas ni nube. El más importante suele ser el costo de la acción que dispara el modelo.',
+    que:['Envíos por canal (email, SMS, WhatsApp)','Inversión en medios de retargeting','Descuentos o incentivos ofrecidos','Licencias de herramientas'],
+    err:['Omitir el costo de la acción: a veces supera al costo del propio modelo.']},
+  ben:{h:'Beneficio incremental',lead:'El beneficio debe ser incremental: lo que el modelo agrega frente a un grupo control que no lo usa.',
+    que:['Volumen mensual de contactos o usuarios que el modelo impacta','Conversión del grupo control y del grupo tratado','Margen por conversión, no ingreso','Ahorros operativos, como envíos que se dejan de hacer'],
+    err:['Atribuir al modelo todas las ventas del segmento contactado.','Usar ingreso en lugar de margen.','Asumir beneficio pleno desde el primer mes: usa un ramp-up.'],
+    note:'Antes del piloto, la conversión con modelo es una hipótesis. En Resultados verás la <b>conversión de equilibrio</b>: el mínimo que debe lograr el grupo tratado para que el proyecto se pague.'}
+};
+
+const SPEC={
+  hh:{cols:[['c','txt','Concepto'],['h','num','Horas'],['t','num','Tarifa S/ por h']],sub:r=>r.h*r.t,cur:'S',blank:()=>({c:'Nuevo entregable',h:0,t:num(S.g.tarifa),on:true}),foot:'Total construcción'},
+  infraDev:{cols:[['c','txt','Componente de nube'],['u','num','US$']],sub:r=>r.u,cur:'U',blank:()=>({c:'Nuevo componente',u:0,on:true}),foot:'Total infra de desarrollo'},
+  serv:{cols:[['c','txt','Servicio'],['h','num','Horas por mes'],['t','num','Tarifa S/ por h']],sub:r=>r.h*r.t,cur:'S',blank:()=>({c:'Nuevo servicio',h:0,t:num(S.g.tarifa),on:true}),foot:'Total servicios por mes'},
+  infraOps:{cols:[['c','txt','Componente de nube'],['a','num','Mín US$'],['z','num','Máx US$']],sub:null,cur:'U',blank:()=>({c:'Nuevo componente',a:0,z:0,on:true}),foot:'Total por mes'},
+  otros:{cols:[['c','txt','Concepto'],['m','num','S/ por mes']],sub:r=>r.m,cur:'S',blank:()=>({c:'Nuevo costo',m:0,on:true}),foot:'Total otros por mes'}
+};
+
+/* ---------- Estado ---------- */
+const clone=o=>JSON.parse(JSON.stringify(o));
+let S=null,hadSaved=false;
+try{const raw=localStorage.getItem(KEY);if(raw){const p=JSON.parse(raw);if(valid(p)){S=p;hadSaved=true;}}}catch(e){}
+if(!S){S=example();S.step=0;}
+function valid(p){return p&&p.g&&p.b&&Array.isArray(p.hh)&&Array.isArray(p.infraDev)&&Array.isArray(p.serv)&&Array.isArray(p.infraOps)&&Array.isArray(p.otros);}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+
+/* ---------- Utilidades ---------- */
+const $=id=>document.getElementById(id);
+const num=v=>{const n=parseFloat(String(v==null?'':v).replace(',','.'));return isFinite(n)?n:0};
+const nf0=new Intl.NumberFormat('es-PE',{maximumFractionDigits:0});
+const nf1=new Intl.NumberFormat('es-PE',{maximumFractionDigits:1,minimumFractionDigits:1});
+const neg=v=>v<0?'−':'';
+const fS=v=>neg(v)+'S/ '+nf0.format(Math.abs(Math.round(v)));
+const fU=v=>neg(v)+'US$ '+nf0.format(Math.abs(Math.round(v)));
+const fP=v=>isFinite(v)?neg(v)+nf1.format(Math.abs(v*100))+'%':'–';
+const fK=v=>{const a=Math.abs(v);return a>=1e6?neg(v)+'S/ '+nf1.format(a/1e6)+'M':a>=1e3?neg(v)+'S/ '+nf0.format(a/1e3)+'k':neg(v)+'S/ '+nf0.format(a)};
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+const slug=s=>(String(s||'business-case').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'business-case');
+function toast(m){const t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,3200);}
+function ask(msg,okLabel,cb){$('modalMsg').textContent=msg;$('modalOk').textContent=okLabel;$('modal').hidden=false;$('modalOk').focus();ask.cb=cb;}
+$('modalNo').onclick=()=>{$('modal').hidden=true};
+$('modalOk').onclick=()=>{$('modal').hidden=true;ask.cb&&ask.cb()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('modal').hidden)$('modal').hidden=true;});
+function download(name,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);}
+
+/* ---------- Modelo financiero ---------- */
+function model(scale){
+  scale=scale==null?1:scale;
+  const g=S.g,b=S.b,tc=num(g.tc);
+  const sum=(rows,f)=>rows.reduce((a,r)=>a+(r.on?f(r):0),0);
+  const capexHH=sum(S.hh,r=>num(r.h)*num(r.t));
+  const devUSD=sum(S.infraDev,r=>num(r.u));
+  const capex=capexHH+devUSD*tc;
+  const serv=sum(S.serv,r=>num(r.h)*num(r.t));
+  const minU=sum(S.infraOps,r=>num(r.a)),maxU=sum(S.infraOps,r=>num(r.z));
+  const fac=g.esc==='min'?0:g.esc==='max'?1:1+num(g.mg)/100;
+  const opsUSD=g.esc==='min'?minU:maxU*fac;
+  const otros=sum(S.otros,r=>num(r.m));
+  const opex=serv+opsUSD*tc+otros;
+  const incr=Math.max(0,num(b.n))*(num(b.c1)-num(b.c0))/100*num(b.mg);
+  const benM=(incr+num(b.ah))*scale;
+  const B=Math.max(0,Math.round(num(g.build))),H=Math.max(1,Math.round(num(g.hor))),ramp=Math.max(0,Math.round(num(b.ramp)));
+  const cf=[-capex];let benT=0;
+  for(let m=1;m<=B;m++)cf.push(0);
+  for(let k=1;k<=H;k++){const bm=benM*(k<=ramp?0.5:1);benT+=bm;cf.push(bm-opex);}
+  const tco=capex+opex*H,empty=tco<=0;
+  const roi=empty?NaN:(benT-tco)/tco;
+  const r=Math.pow(1+num(g.rate)/100,1/12)-1;
+  let van=0;cf.forEach((v,m)=>van+=v/Math.pow(1+r,m));
+  let cum=0,pb=null;const cumA=[];
+  cf.forEach((v,m)=>{const prev=cum;cum+=v;cumA.push(cum);if(pb===null&&m>0&&prev<0&&cum>=0)pb=(m-1)+(-prev)/v-B;});
+  if(empty)pb=null;else if(pb===null&&capex<=0&&cf.slice(1).every(v=>v>=0))pb=0;
+  const E=H-Math.min(ramp,H)*0.5,nm=Math.max(0,num(b.n))*num(b.mg);
+  const c1be=nm>0&&!empty?num(b.c0)+((tco/E-num(b.ah))/nm)*100:NaN;
+  return {tc,capexHH,devUSD,capex,serv,minU,maxU,opsUSD,otros,opex,incr,benM,B,H,ramp,cf,cumA,benT,tco,roi,van,pb,c1be,empty,
+    cats:[['Construcción (HH)',capexHH,'var(--accent)'],['Infra de desarrollo',devUSD*tc,'#5C7CFA'],['Servicios mensuales',serv*H,'var(--accent2)'],['Infra mensual',opsUSD*tc*H,'#C08AE8'],['Otros costos',otros*H,'#E0A23C']]};
+}
+const pbText=M=>M.empty?'–':M.pb===null?'No recupera':nf1.format(M.pb)+' meses';
+
+/* ---------- Render ---------- */
+function renderStepper(){
+  $('stepper').innerHTML=STEPS.map((s,i)=>'<button type="button" class="st'+(i===S.step?' cur':i<=(S.max||0)?' done':'')+'" data-go="'+i+'"'+(i===S.step?' aria-current="step"':'')+'><span class="n">'+(i===0?'↺':i)+'</span>'+s.t+'</button>').join('');
+  const cur=$('stepper').querySelector('.cur');if(cur&&cur.scrollIntoView)cur.scrollIntoView({block:'nearest',inline:'center'});
+}
+function guideBlock(id){const g=GUIDE[id];return '<div class="guide"><div><h3>Qué incluir</h3><ul>'+g.que.map(x=>'<li>'+x+'</li>').join('')+'</ul></div><div class="err"><h3>Errores frecuentes</h3><ul>'+g.err.map(x=>'<li>'+x+'</li>').join('')+'</ul></div></div>'+(g.note?'<p class="note">'+g.note+'</p>':'');}
+function head(i){const s=STEPS[i],g=GUIDE[s.id];return '<div class="kicker">Paso '+i+' de '+(STEPS.length-1)+(s.tag?' · '+s.tag:'')+'</div><h1>'+(g?g.h:s.t)+'</h1>'+(g?'<p class="lead">'+g.lead+'</p>':'');}
+function navBlock(i){
+  const prev=i>0?'<button class="btn quiet" type="button" data-go="'+(i-1)+'">← '+STEPS[i-1].t+'</button>':'<span></span>';
+  const next=i<STEPS.length-1?'<button class="btn" type="button" data-go="'+(i+1)+'">'+(i===STEPS.length-2?'Ver resultados →':'Siguiente: '+STEPS[i+1].t+' →')+'</button>':'<button class="btn ghost" type="button" data-go="1">Revisar supuestos</button>';
+  return '<div class="nav">'+prev+next+'</div>';
+}
+const field=(id,attr,label,hint,step)=>'<label class="f" for="'+id+'">'+label+'<input id="'+id+'" type="number" step="'+(step||'any')+'" inputmode="decimal" '+attr+'>'+(hint?'<small>'+hint+'</small>':'')+'</label>';
+
+function render(){
+  const i=S.step,s=STEPS[i];let h='<section class="stack">';
+  if(s.id==='inicio')h+=inicio();
+  else if(s.id==='res')h+=head(i).replace('<h1>Resultados</h1>','<h1>Resultados del business case</h1><p class="lead">ROI, payback y VAN con los supuestos ingresados. Revisa las observaciones antes de presentar.</p>')+'<div id="results"></div>'+navBlock(i);
+  else{
+    h+='<div>'+head(i)+'</div><div class="mini" data-mini></div>'+guideBlock(s.id);
+    if(s.id==='sup')h+='<div class="card"><div class="params">'+
+      field('g-tc','data-g="tc"','Tipo de cambio (S/ por US$)','Convierte los costos de nube','0.01')+
+      field('g-build','data-g="build"','Meses de construcción','Hasta el go-live, con piloto','1')+
+      field('g-hor','data-g="hor"','Horizonte de operación (meses)','Desde el go-live','1')+
+      field('g-rate','data-g="rate"','Tasa de descuento anual (%)','Para el VAN','0.5')+
+      field('g-tarifa','data-g="tarifa"','Tarifa por hora por defecto (S/)','Se usa en las filas nuevas','1')+
+      '</div></div>';
+    else if(s.id==='ben')h+='<div class="card"><div class="params">'+
+      field('b-n','data-b="n"','Contactos impactados por mes','Usuarios que el modelo selecciona','100')+
+      field('b-c0','data-b="c0"','Conversión sin modelo (%)','Grupo control','0.1')+
+      field('b-c1','data-b="c1"','Conversión con modelo (%)','Grupo tratado','0.1')+
+      field('b-mg','data-b="mg"','Margen por conversión (S/)','Margen, no ingreso','1')+
+      field('b-ah','data-b="ah"','Ahorros operativos por mes (S/)','Ej.: envíos que se dejan de hacer','100')+
+      field('b-ramp','data-b="ramp"','Meses de ramp-up al 50%','Primeros meses tras el go-live','1')+
+      '</div><p class="note" id="benLine" style="margin-top:12px"></p></div>';
+    else{
+      h+='<div class="card">';
+      if(s.id==='infraOps')h+='<div class="tools"><label class="f" for="g-esc">Escenario de costo<select id="g-esc" data-g="esc"><option value="margen">Máximo + margen operativo</option><option value="max">Máximo</option><option value="min">Mínimo</option></select></label>'+field('g-mg','data-g="mg"','Margen operativo (%)','Reejecuciones y picos','5')+'</div>';
+      h+='<div class="tbl" id="t-'+s.id+'"></div></div>';
+    }
+    h+=navBlock(i);
+  }
+  h+='</section>';
+  $('stage').innerHTML=h;
+  if(SPEC[s.id])renderTable(s.id);
+  document.querySelectorAll('[data-g]').forEach(el=>el.value=S.g[el.dataset.g]);
+  document.querySelectorAll('[data-b]').forEach(el=>el.value=S.b[el.dataset.b]);
+  $('pname').value=S.name||'';
+  renderStepper();calc();
+}
+
+function inicio(){
+  let h='<div><div class="kicker">Bienvenido</div><h1>Arma el business case de tu modelo predictivo</h1><p class="lead">Te guiamos en 8 pasos: registras lo que cuesta construir el modelo (CAPEX), lo que cuesta operarlo cada mes (OPEX) y el beneficio incremental que genera. Al final obtienes ROI, payback y VAN, listos para exportar.</p></div>';
+  if(hadSaved)h+='<div class="resume"><div><b>'+esc(S.name||'Proyecto sin nombre')+'</b><div class="note">Tienes un business case guardado en este navegador.</div></div><button class="btn" type="button" data-go="'+Math.max(1,S.max||1)+'">Continuar donde lo dejaste →</button></div>';
+  h+='<div class="choices"><button class="choice" type="button" id="chEj"><b>Empezar con un ejemplo</b><span>Modelo de propensión de retargeting para e-commerce, con horas, nube y soporte ya cargados. Ideal para ver cómo funciona y adaptarlo.</span><span class="go">Cargar ejemplo →</span></button>'+
+    '<button class="choice" type="button" id="chBl"><b>Empezar en blanco</b><span>Filas sugeridas con valores en cero para que ingreses tus propias horas, tarifas y costos.</span><span class="go">Empezar en blanco →</span></button></div>';
+  h+='<div class="concepts"><div><div class="t" style="color:var(--accent)">CAPEX</div><p>Inversión única para construir: horas del equipo e infraestructura de desarrollo.</p></div>'+
+    '<div><div class="t" style="color:var(--accent2)">OPEX</div><p>Costo recurrente para operar: soporte, nube mensual y costo de la acción.</p></div>'+
+    '<div><div class="t" style="color:var(--good)">ROI</div><p>Cuánto rinde cada sol invertido en el horizonte evaluado.</p><div class="formula">ROI = (Beneficio − TCO) ÷ TCO<br>TCO = CAPEX + OPEX × meses</div></div></div>';
+  return h;
+}
+
+function renderTable(sec){
+  const sp=SPEC[sec],rows=S[sec];
+  let h='<table><thead><tr><th><span class="sr" title="Incluir en el cálculo">✓</span></th>';
+  sp.cols.forEach(([k,t,l])=>h+='<th'+(t==='num'?' class="r"':'')+'>'+l+'</th>');
+  h+='<th class="r">'+(sec==='infraOps'?'Usado US$':'Subtotal')+'</th><th></th></tr></thead><tbody>';
+  rows.forEach((r,i)=>{
+    h+='<tr id="'+sec+'-'+i+'-tr"'+(r.on?'':' class="off"')+'><td class="c-on"><input type="checkbox" id="'+sec+'-'+i+'-on" data-s="'+sec+'" data-i="'+i+'" data-k="on" aria-label="Incluir en el cálculo"'+(r.on?' checked':'')+'></td>';
+    sp.cols.forEach(([k,t])=>{h+='<td class="c-'+t+'"><input id="'+sec+'-'+i+'-'+k+'" data-s="'+sec+'" data-i="'+i+'" data-k="'+k+'" '+(t==='num'?'type="number" step="any" inputmode="decimal"':'type="text"')+' value="'+esc(r[k])+'" aria-label="'+esc(sp.cols.find(c=>c[0]===k)[2])+'"></td>';});
+    h+='<td class="r sub" id="'+sec+'-'+i+'-sub"></td><td class="c-del"><button class="del" type="button" data-del="'+sec+'" data-i="'+i+'" aria-label="Eliminar fila">×</button></td></tr>';
+  });
+  if(!rows.length)h+='<tr><td colspan="'+(sp.cols.length+3)+'" class="note" style="padding:14px 6px">No hay filas. Agrega la primera con el botón de abajo.</td></tr>';
+  h+='</tbody><tfoot><tr><td></td><td colspan="'+sp.cols.length+'">'+sp.foot+'</td><td class="r" id="'+sec+'-tot"></td><td></td></tr></tfoot></table>';
+  h+='<button class="add" type="button" data-add="'+sec+'">+ Agregar fila</button>';
+  $('t-'+sec).innerHTML=h;
+}
+
+function calc(){
+  const M=model(1);
+  Object.keys(SPEC).forEach(sec=>{
+    if(!$('t-'+sec))return;
+    const sp=SPEC[sec];let tot=0;
+    S[sec].forEach((r,i)=>{
+      const cell=$(sec+'-'+i+'-sub');if(!cell)return;let v;
+      if(sec==='infraOps')v=S.g.esc==='min'?num(r.a):num(r.z)*(S.g.esc==='margen'?1+num(S.g.mg)/100:1);
+      else{const o={};sp.cols.forEach(([k])=>o[k]=num(r[k]));v=sp.sub(o);}
+      cell.textContent=sp.cur==='U'?fU(v):fS(v);if(r.on)tot+=v;
+    });
+    $(sec+'-tot').textContent=sp.cur==='U'?fU(tot)+' ≈ '+fS(tot*M.tc):fS(tot);
+  });
+  const bl=$('benLine');
+  if(bl)bl.innerHTML='Beneficio incremental mensual: <b>'+fS(M.benM)+'</b> = '+nf0.format(num(S.b.n))+' × '+nf1.format(num(S.b.c1)-num(S.b.c0))+' pp × '+fS(num(S.b.mg))+' + ahorros de '+fS(num(S.b.ah))+'.';
+  const roiCls=M.empty?'':M.roi>=0?'pos':'neg';
+  $('rail').innerHTML='<div class="card"><h3>Resumen en vivo</h3><div class="big"><div class="bt"><div class="l">ROI</div><div class="v '+roiCls+'">'+fP(M.roi)+'</div></div><div class="bt"><div class="l">Payback</div><div class="v">'+pbText(M)+'</div></div></div>'+
+    '<div class="ln"><span>CAPEX</span><b>'+fS(M.capex)+'</b></div><div class="ln"><span>OPEX por mes</span><b>'+fS(M.opex)+'</b></div><div class="ln"><span>TCO a '+M.H+' meses</span><b>'+fS(M.tco)+'</b></div><div class="ln"><span>Beneficio por mes</span><b>'+fS(M.benM)+'</b></div><div class="ln"><span>VAN</span><b class="'+(M.empty?'':M.van>=0?'pos':'neg')+'">'+fK(M.van)+'</b></div>'+
+    (S.step!==STEPS.length-1?'<button class="btn ghost" type="button" data-go="'+(STEPS.length-1)+'" style="width:100%;margin-top:12px">Ver resultados</button>':'')+'</div>';
+  document.querySelectorAll('[data-mini]').forEach(el=>el.innerHTML='<span>CAPEX <b>'+fS(M.capex)+'</b></span><span>OPEX/mes <b>'+fS(M.opex)+'</b></span><span>ROI <b class="'+roiCls+'">'+fP(M.roi)+'</b></span><span>Payback <b>'+pbText(M)+'</b></span>');
+  if($('results'))renderResults(M);
+  save();
+}
+
+function checks(M){
+  const L=[];
+  const zeroRate=S.hh.concat(S.serv).some(r=>r.on&&num(r.h)>0&&num(r.t)<=0);
+  if(M.empty)L.push(['bad','Aún no hay costos registrados. Completa los pasos de construcción y operación.']);
+  if(zeroRate)L.push(['warn','Hay filas con horas pero sin tarifa. Su costo se está contando como cero.']);
+  if(!M.empty&&M.opex<=0)L.push(['warn','No hay costos de operación mensual. Todo modelo en producción tiene al menos nube y soporte.']);
+  if(M.otros<=0)L.push(['warn','No registraste costo de la acción (envíos, medios o incentivos). Confirma que realmente es cero.']);
+  if(num(S.b.c1)<=num(S.b.c0)&&num(S.b.ah)<=0)L.push(['bad','No hay beneficio incremental: la conversión con modelo no supera a la del control y no hay ahorros.']);
+  if(num(S.b.c1)<num(S.b.c0))L.push(['bad','La conversión con modelo es menor que la del grupo control.']);
+  if(M.H>36)L.push(['warn','El horizonte supera 36 meses. Considera reentrenamientos mayores o una segunda etapa.']);
+  if(num(S.b.ramp)===0)L.push(['warn','Sin ramp-up: asumes beneficio pleno desde el primer mes de operación.']);
+  if(isFinite(M.c1be)&&num(S.b.c1)>num(S.b.c0)&&num(S.b.c1)<M.c1be)L.push(['bad','La conversión con modelo ('+nf1.format(num(S.b.c1))+'%) está por debajo de la de equilibrio ('+nf1.format(M.c1be)+'%).']);
+  if(!L.length)L.push(['ok','Sin observaciones. Los supuestos cubren costos de construcción, operación y beneficio incremental.']);
+  return L;
+}
+
+function renderResults(M){
+  const vClass=M.empty?'':(M.van>=0&&M.roi>=0?'ok':'no');
+  let verdict;
+  if(M.empty)verdict='Completa los costos para ver el resultado.';
+  else if(M.roi>=0)verdict='El proyecto <b>recupera su costo total</b> en el horizonte de '+M.H+' meses: por cada S/ 1 invertido retorna S/ '+nf1.format(1+M.roi).replace(/,0$/,'')+' de beneficio. El payback llega '+(M.pb===null?'fuera del horizonte':'a los '+nf1.format(M.pb)+' meses del go-live')+'.';
+  else verdict='Con estos supuestos el proyecto <b>no recupera su costo total</b> en '+M.H+' meses. Revisa la conversión de equilibrio o amplía el horizonte.';
+  let be;
+  if(!isFinite(M.c1be))be='–';else if(M.c1be<=num(S.b.c0))be='Cubierto';else be=nf1.format(M.c1be)+'%';
+  let h='<div class="stack">';
+  h+='<div class="kpis"><div class="kpi"><div class="l">ROI</div><div class="v '+(M.empty?'':M.roi>=0?'pos':'neg')+'">'+fP(M.roi)+'</div><div class="s">a '+M.H+' meses de operación</div></div>'+
+    '<div class="kpi"><div class="l">VAN</div><div class="v '+(M.empty?'':M.van>=0?'pos':'neg')+'">'+fK(M.van)+'</div><div class="s">tasa '+nf1.format(num(S.g.rate))+'% anual</div></div>'+
+    '<div class="kpi"><div class="l">Payback</div><div class="v">'+pbText(M)+'</div><div class="s">desde el go-live</div></div>'+
+    '<div class="kpi"><div class="l">Conversión de equilibrio</div><div class="v">'+be+'</div><div class="s">'+(be==='Cubierto'?'los ahorros pagan el proyecto':'control: '+nf1.format(num(S.b.c0))+'%')+'</div></div></div>';
+  h+='<div class="verdict '+vClass+'">'+verdict+'</div>';
+  h+='<div class="two"><div class="card"><h2>Flujo de caja acumulado</h2>'+chart(M)+'</div><div class="card"><h2>Composición del TCO</h2>'+composition(M)+'</div></div>';
+  const sc=[['Pesimista',0.5],['Base',1],['Optimista',1.5]];
+  h+='<div class="card"><h2>Sensibilidad al beneficio</h2><p class="note" style="margin-bottom:8px">El beneficio es la variable más incierta. Así cambia el resultado si el beneficio mensual es la mitad o 50% más que lo estimado.</p><div class="tbl"><table><thead><tr><th>Escenario</th><th class="r">Beneficio por mes</th><th class="r">ROI</th><th class="r">VAN</th><th class="r">Payback</th></tr></thead><tbody>'+
+    sc.map(([l,f])=>{const x=model(f);return '<tr><td>'+l+' ('+(f*100)+'%)</td><td class="r">'+fS(x.benM)+'</td><td class="r '+(x.empty?'':x.roi>=0?'pos':'neg')+'">'+fP(x.roi)+'</td><td class="r '+(x.empty?'':x.van>=0?'pos':'neg')+'">'+fK(x.van)+'</td><td class="r">'+pbText(x)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+  h+='<div class="card"><h2>Revisiones</h2><ul class="checks">'+checks(M).map(([l,m])=>'<li class="'+l+'">'+m+'</li>').join('')+'</ul></div>';
+  h+='<details class="card" open><summary>Detalle de supuestos y costos</summary>'+detail(M)+'</details>';
+  h+='<div class="card noprint"><h2>Exportar</h2><div class="actions"><button class="btn" type="button" id="xXlsx">Descargar Excel</button><button class="btn ghost" type="button" id="xPrint">Imprimir o guardar PDF</button><button class="btn ghost" type="button" id="xCopy">Copiar para Excel</button><button class="btn ghost" type="button" id="xJson">Guardar escenario</button></div><textarea id="tsvBox" hidden readonly aria-label="Datos para copiar"></textarea></div>';
+  h+='</div>';
+  $('results').innerHTML=h;
+}
+
+function detail(M){
+  const act=rows=>rows.filter(r=>r.on);
+  let h='<div class="tbl dt"><h4>CAPEX · Construcción</h4><table><thead><tr><th>Concepto</th><th class="r">Horas</th><th class="r">Tarifa</th><th class="r">Subtotal</th></tr></thead><tbody>'+
+    act(S.hh).map(r=>'<tr><td>'+esc(r.c)+'</td><td class="r">'+nf0.format(num(r.h))+'</td><td class="r">'+fS(num(r.t))+'</td><td class="r">'+fS(num(r.h)*num(r.t))+'</td></tr>').join('')+'</tbody></table>';
+  h+='<h4>CAPEX · Infra de desarrollo</h4><table><thead><tr><th>Componente</th><th class="r">US$</th><th class="r">S/</th></tr></thead><tbody>'+
+    act(S.infraDev).map(r=>'<tr><td>'+esc(r.c)+'</td><td class="r">'+fU(num(r.u))+'</td><td class="r">'+fS(num(r.u)*M.tc)+'</td></tr>').join('')+'</tbody></table>';
+  h+='<h4>OPEX · Servicios mensuales</h4><table><thead><tr><th>Servicio</th><th class="r">Horas/mes</th><th class="r">Tarifa</th><th class="r">S/ por mes</th></tr></thead><tbody>'+
+    act(S.serv).map(r=>'<tr><td>'+esc(r.c)+'</td><td class="r">'+nf0.format(num(r.h))+'</td><td class="r">'+fS(num(r.t))+'</td><td class="r">'+fS(num(r.h)*num(r.t))+'</td></tr>').join('')+'</tbody></table>';
+  const lab=S.g.esc==='min'?'mínimo':S.g.esc==='max'?'máximo':'máximo + '+nf0.format(num(S.g.mg))+'% de margen';
+  h+='<h4>OPEX · Infra mensual (escenario '+lab+')</h4><table><thead><tr><th>Componente</th><th class="r">Mín US$</th><th class="r">Máx US$</th></tr></thead><tbody>'+
+    act(S.infraOps).map(r=>'<tr><td>'+esc(r.c)+'</td><td class="r">'+fU(num(r.a))+'</td><td class="r">'+fU(num(r.z))+'</td></tr>').join('')+'<tr><td><b>Usado en el cálculo</b></td><td></td><td class="r"><b>'+fU(M.opsUSD)+'</b></td></tr></tbody></table>';
+  h+='<h4>OPEX · Otros costos mensuales</h4><table><tbody>'+act(S.otros).map(r=>'<tr><td>'+esc(r.c)+'</td><td class="r">'+fS(num(r.m))+'</td></tr>').join('')+'</tbody></table>';
+  h+='<h4>Supuestos</h4><table><tbody>'+
+    [['Tipo de cambio',nf1.format(num(S.g.tc))+' S/ por US$'],['Construcción',M.B+' meses'],['Horizonte de operación',M.H+' meses'],['Tasa de descuento',nf1.format(num(S.g.rate))+'% anual'],['Contactos impactados por mes',nf0.format(num(S.b.n))],['Conversión sin / con modelo',nf1.format(num(S.b.c0))+'% / '+nf1.format(num(S.b.c1))+'%'],['Margen por conversión',fS(num(S.b.mg))],['Ahorros operativos por mes',fS(num(S.b.ah))],['Ramp-up al 50%',M.ramp+' meses']]
+    .map(([a,b])=>'<tr><td>'+a+'</td><td class="r">'+b+'</td></tr>').join('')+'</tbody></table></div>';
+  return h;
+}
+
+function composition(M){
+  const tot=M.cats.reduce((a,c)=>a+c[1],0);
+  if(tot<=0)return '<p class="note">Sin costos registrados.</p>';
+  let h='<div class="sbar" aria-hidden="true">'+M.cats.map(c=>c[1]>0?'<i style="width:'+(c[1]/tot*100)+'%;background:'+c[2]+'"></i>':'').join('')+'</div><table><tbody>';
+  h+=M.cats.map(c=>'<tr><td><span class="dot" style="background:'+c[2]+'"></span>'+c[0]+'</td><td class="r">'+fS(c[1])+'</td><td class="r" style="color:var(--muted)">'+fP(c[1]/tot)+'</td></tr>').join('');
+  h+='<tr><td><b>TCO a '+M.H+' meses</b></td><td class="r"><b>'+fS(tot)+'</b></td><td></td></tr></tbody></table>';
+  h+='<p class="note" style="margin-top:10px">CAPEX '+fP(M.capex/tot)+' · OPEX acumulado '+fP(1-M.capex/tot)+'</p>';
+  return h;
+}
+
+function niceStep(range){const raw=range/4;const p=Math.pow(10,Math.floor(Math.log10(raw||1)));const m=raw/p;return (m<=1?1:m<=2?2:m<=5?5:10)*p;}
+function chart(M){
+  if(M.empty)return '<p class="note">Ingresa costos para ver el flujo.</p>';
+  const W=620,Hh=250,L=60,R=14,T=18,Bm=34,c=M.cumA,n=c.length;
+  let lo=Math.min(0,...c),hi=Math.max(0,...c);if(hi===lo)hi=lo+1;
+  const st=niceStep(hi-lo);lo=Math.floor(lo/st)*st;hi=Math.ceil(hi/st)*st;
+  const x=i=>L+i*(W-L-R)/Math.max(1,n-1),y=v=>T+(hi-v)/(hi-lo)*(Hh-T-Bm);
+  let s='<svg viewBox="0 0 '+W+' '+Hh+'" width="100%" role="img" aria-label="Flujo de caja acumulado por mes">';
+  if(M.B>0)s+='<rect x="'+x(0)+'" y="'+T+'" width="'+(x(M.B)-x(0))+'" height="'+(Hh-T-Bm)+'" fill="var(--soft)"/>';
+  for(let v=lo;v<=hi+1e-9;v+=st){s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="var(--line)"/><text x="'+(L-6)+'" y="'+(y(v)+4)+'" text-anchor="end" font-size="10.5" fill="var(--muted)">'+fK(v)+'</text>';}
+  s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(0)+'" y2="'+y(0)+'" stroke="var(--fg)" stroke-width="1.2" opacity=".55"/>';
+  const pts=c.map((v,i)=>x(i)+','+y(v)).join(' ');
+  s+='<polygon points="'+x(0)+','+y(0)+' '+pts+' '+x(n-1)+','+y(0)+'" fill="var(--accent)" opacity=".13"/><polyline points="'+pts+'" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round"/>';
+  const every=Math.max(1,Math.ceil(n/12));
+  for(let i=0;i<n;i+=every)s+='<text x="'+x(i)+'" y="'+(Hh-Bm+16)+'" text-anchor="middle" font-size="10.5" fill="var(--muted)">'+i+'</text>';
+  s+='<text x="'+(W-R)+'" y="'+(Hh-3)+'" text-anchor="end" font-size="10.5" fill="var(--muted)">mes</text>';
+  if(M.B>0)s+='<text x="'+((x(0)+x(M.B))/2)+'" y="'+(T+14)+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--muted)">Construcción</text>';
+  s+='<line x1="'+x(M.B)+'" x2="'+x(M.B)+'" y1="'+T+'" y2="'+(Hh-Bm)+'" stroke="var(--accent2)" stroke-dasharray="4 3" stroke-width="1.2"/><text x="'+(x(M.B)+5)+'" y="'+(Hh-Bm-6)+'" font-size="10.5" font-weight="600" fill="var(--accent2)">Go-live</text>';
+  if(M.pb!==null){const px=x(M.B+M.pb);s+='<circle cx="'+px+'" cy="'+y(0)+'" r="5" fill="var(--good)" stroke="var(--surface)" stroke-width="2"/><text x="'+Math.min(px+6,W-R-50)+'" y="'+(y(0)-10)+'" font-size="10.5" font-weight="700" fill="var(--good)">Payback</text>';}
+  s+='<circle cx="'+x(n-1)+'" cy="'+y(c[n-1])+'" r="3.5" fill="var(--accent)"/><text x="'+(x(n-1)-4)+'" y="'+(y(c[n-1])+(c[n-1]>=0?-8:16))+'" text-anchor="end" font-size="11" font-weight="700" fill="var(--fg)">'+fK(c[n-1])+'</text></svg>';
+  return s;
+}
+
+/* ---------- Exportación ---------- */
+function rowsForExport(M){
+  const R=v=>Math.round(v*100)/100;
+  return {
+    resumen:[['Business Case ML'],['Proyecto',S.name||''],[],['Indicador','Valor'],['CAPEX (S/)',R(M.capex)],['OPEX mensual (S/)',R(M.opex)],['Horizonte de operación (meses)',M.H],['TCO (S/)',R(M.tco)],['Beneficio mensual (S/)',R(M.benM)],['Beneficio total (S/)',R(M.benT)],['ROI (%)',isFinite(M.roi)?R(M.roi*100):''],['VAN (S/)',R(M.van)],['Payback (meses desde go-live)',M.pb===null?'No recupera':R(M.pb)],['Conversión de equilibrio (%)',isFinite(M.c1be)?R(M.c1be):''],[],['Supuesto','Valor'],['Tipo de cambio S/ por US$',num(S.g.tc)],['Meses de construcción',M.B],['Tasa de descuento anual (%)',num(S.g.rate)],['Contactos impactados por mes',num(S.b.n)],['Conversión sin modelo (%)',num(S.b.c0)],['Conversión con modelo (%)',num(S.b.c1)],['Margen por conversión (S/)',num(S.b.mg)],['Ahorros operativos por mes (S/)',num(S.b.ah)],['Meses de ramp-up al 50%',M.ramp]],
+    capex:[['Construcción (HH)','Horas','Tarifa S/','Subtotal S/']].concat(S.hh.filter(r=>r.on).map(r=>[r.c,num(r.h),num(r.t),R(num(r.h)*num(r.t))]),[[]],[['Infra de desarrollo','US$','S/']],S.infraDev.filter(r=>r.on).map(r=>[r.c,num(r.u),R(num(r.u)*M.tc)])),
+    opex:[['Servicios mensuales','Horas/mes','Tarifa S/','S/ por mes']].concat(S.serv.filter(r=>r.on).map(r=>[r.c,num(r.h),num(r.t),R(num(r.h)*num(r.t))]),[[]],[['Infra mensual','Mín US$','Máx US$']],S.infraOps.filter(r=>r.on).map(r=>[r.c,num(r.a),num(r.z)]),[['Usado en el cálculo (US$/mes)','',R(M.opsUSD)]],[[]],[['Otros costos mensuales','S/ por mes']],S.otros.filter(r=>r.on).map(r=>[r.c,num(r.m)])),
+    flujo:[['Mes','Etapa','Flujo S/','Acumulado S/']].concat(M.cf.map((v,i)=>[i,i===0?'Inversión':i<=M.B?'Construcción':'Operación',R(v),R(M.cumA[i])]))
+  };
+}
+function loadXLSX(){return new Promise((res,rej)=>{if(window.XLSX)return res(window.XLSX);const s=document.createElement('script');s.src=XLSX_SRC;s.onload=()=>window.XLSX?res(window.XLSX):rej();s.onerror=rej;document.head.appendChild(s);});}
+async function exportXlsx(){
+  try{
+    const X=await loadXLSX(),M=model(1),D=rowsForExport(M),wb=X.utils.book_new();
+    const add=(name,aoa,cols)=>{const ws=X.utils.aoa_to_sheet(aoa);ws['!cols']=cols.map(w=>({wch:w}));X.utils.book_append_sheet(wb,ws,name);};
+    add('Resumen',D.resumen,[36,18]);add('CAPEX',D.capex,[60,12,12,14]);add('OPEX',D.opex,[60,12,12,14]);
+    const fl=D.flujo.map((r,i)=>i===0?r:[r[0],r[1],r[2],{t:'n',v:r[3],f:i===1?'C2':'D'+i+'+C'+(i+1)}]);
+    add('Flujo',fl,[8,14,14,16]);
+    X.writeFile(wb,slug(S.name)+'.xlsx');toast('Excel descargado.');
+  }catch(e){toast('No se pudo generar el Excel. Usa "Copiar para Excel".');}
+}
+function copyTsv(){
+  const D=rowsForExport(model(1));
+  const txt=[].concat(D.resumen,[[]],D.capex,[[]],D.opex,[[]],D.flujo).map(r=>r.join('\t')).join('\n');
+  const box=$('tsvBox');
+  const fb=()=>{box.value=txt;box.hidden=false;box.focus();box.select();toast('Selecciona el texto y cópialo con Ctrl+C.');};
+  try{navigator.clipboard.writeText(txt).then(()=>{box.hidden=true;toast('Copiado. Pégalo en una hoja de Excel.');},fb);}catch(e){fb();}
+}
+function saveJson(){
+  const data=clone(S);data.app='business-case-ml';data.version=1;
+  download(slug(S.name)+'.json',new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));toast('Escenario guardado como archivo.');
+}
+
+/* ---------- Eventos ---------- */
+function go(i){i=Math.max(0,Math.min(STEPS.length-1,+i));S.step=i;if(i>(S.max||0))S.max=i;render();window.scrollTo({top:0});}
+function load(fresh){hadSaved=false;S=fresh;S.step=1;S.max=1;render();window.scrollTo({top:0});}
+document.addEventListener('input',e=>{
+  const t=e.target,d=t.dataset;
+  if(t.id==='pname'){S.name=t.value;save();return;}
+  if(d.g){S.g[d.g]=t.tagName==='SELECT'?t.value:num(t.value);calc();return;}
+  if(d.b){S.b[d.b]=num(t.value);calc();return;}
+  if(d.s){const r=S[d.s][+d.i];if(!r)return;
+    if(d.k==='on'){r.on=t.checked;$(d.s+'-'+d.i+'-tr').classList.toggle('off',!r.on);}
+    else r[d.k]=d.k==='c'?t.value:num(t.value);
+    calc();}
+});
+document.addEventListener('change',e=>{if(e.target.tagName==='SELECT'&&e.target.dataset.g){S.g[e.target.dataset.g]=e.target.value;calc();}});
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t)return;
+  if(t.dataset.go!=null)return go(t.dataset.go);
+  if(t.dataset.add){S[t.dataset.add].push(SPEC[t.dataset.add].blank());renderTable(t.dataset.add);calc();const k=S[t.dataset.add].length-1,el=$(t.dataset.add+'-'+k+'-c');if(el){el.focus();el.select();}return;}
+  if(t.dataset.del){S[t.dataset.del].splice(+t.dataset.i,1);renderTable(t.dataset.del);calc();return;}
+  switch(t.id){
+    case 'chEj':load(example());break;
+    case 'chBl':load(blank());break;
+    case 'btnEjemplo':ask('Se reemplazarán los datos actuales por el ejemplo. Si quieres conservarlos, primero usa Guardar.','Cargar ejemplo',()=>load(example()));break;
+    case 'btnNuevo':ask('Se borrarán los datos actuales para empezar en blanco. Si quieres conservarlos, primero usa Guardar.','Empezar en blanco',()=>load(blank()));break;
+    case 'btnAbrir':$('fileIn').click();break;
+    case 'btnGuardar':case 'xJson':saveJson();break;
+    case 'xXlsx':exportXlsx();break;
+    case 'xCopy':copyTsv();break;
+    case 'xPrint':window.print();break;
+  }
+});
+$('fileIn').addEventListener('change',e=>{
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{try{const p=JSON.parse(rd.result);if(!valid(p))throw 0;hadSaved=false;S=p;S.step=STEPS.length-1;S.max=STEPS.length-1;render();toast('Escenario abierto: '+(S.name||'sin nombre')+'.');}catch(err){toast('El archivo no es un escenario válido de esta aplicación.');}e.target.value='';};
+  rd.readAsText(f);
+});
+
+render();
+})();
+</script>
+</body>
+</html>
